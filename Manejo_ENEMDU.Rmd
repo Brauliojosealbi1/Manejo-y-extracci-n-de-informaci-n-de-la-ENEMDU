@@ -1,0 +1,193 @@
+---
+title: "Carga y manejo de la ENEMDU" 
+by: Juan José Almeida
+output: html_notebook
+---
+
+
+Limpieza de entorno de trabajo
+```{r}
+rm(list = ls())
+gc()
+```
+
+Carga de paquetes y definir directorio de trabajo
+```{r}
+pacman::p_load(readr, readxl, openxlsx, tidyverse, rstudioapi, statsr, skimr, haven, foreign, data.table, questionr, survey, jtools)
+
+set_wd <- function() {
+  current_path <- getActiveDocumentContext()$path 
+  setwd(dirname(current_path ))
+  }
+
+set_wd()
+```
+
+Importar las bases
+```{r}
+set_wd()
+bdd_personas <- read_delim("Bases_de_Datos_ENEMDU_dic_2024/2_BDD_DATOS_ABIERTOS_ENEMDU_2024_12_CSV/enemdu_persona_2024_12.csv", 
+                           delim = ";", 
+                           locale = locale(decimal_mark = ","),
+                           escape_double = FALSE, 
+                           trim_ws = TRUE,
+                           show_col_types = FALSE,
+                           name_repair = "unique")
+
+# dd_hogar <- read_stata("BDD_ENSANUT_2018_STATA_2/BDD_ENSANUT_2018_STATA_2/2_BDD_ENS2018_f1_hogar.dta")
+```
+
+(PASO OPCIONAL)
+Crear bases de referencia con los nombres de las varibales
+```{r}
+
+variables_bdd_personas = data.frame(names(bdd_personas))
+```
+
+
+Creación de variable para contar el N de personas
+```{r}
+bdd_personas <- bdd_personas %>% mutate(one = 1)
+```
+
+
+Calcular los factores de expansión
+```{r}
+
+exp_per = svydesign(id=~upm,
+                    strata=~estrato,
+                    data=bdd_personas,
+                    weights=~fexp)
+
+#exp_hog = svydesign(id=~upm,
+#                    strata=~estrato,
+#                    data=bdd_hogar,
+#                    weights=~fexp)
+```
+
+
+Definir las parroquias de Quito
+```{r}
+# Vector con los códigos de parroquias de Quito
+parroquias_quito <- c(170101, 170102, 170103, 170104, 170105, 170106, 170107, 170108,
+                      170109, 170110, 170111, 170112, 170113, 170114, 170115, 170116,
+                      170117, 170118, 170119, 170120, 170121, 170122, 170123, 170124,
+                      170125, 170126, 170127, 170128, 170129, 170130, 170131, 170132,
+                      170150, 170151, 170152, 170153, 170154, 170155, 170156, 170157,
+                      170158, 170159, 170160, 170161, 170162, 170163, 170164, 170165,
+                      170166, 170168, 170169, 170170, 170171, 170172, 170174, 170175,
+                      170176, 170177, 170178, 170179, 170180, 170181, 170183, 170184,
+                      170185, 170186)
+```
+
+
+#Procentaje de menores de 2 años que tienen desnutrición crónica
+svyciprop(~I(dcronica_2==1),
+          design = exp_per,
+          na.rm = TRUE,
+          method = "xlogit")
+
+#Porcentaje de mujeres con pobreza en Quito
+svyciprop(~I(ciudad==170101| 170102| 170103| 170104| 170105| 170106| 170107| 170108| 170109| 170110| 170111| 170112| 170113| 170114| 170115| 170116| 170117| 170118| 170119| 170120| 170121| 170122| 170123| 170124| 170125| 170126| 170127| 170128| 170129| 170130| 170131| 170132| 170150| 170151| 170152| 170153| 170154| 170155| 170156| 170157| 170158| 170159| 170160| 170161| 170162| 170163| 170164| 170165| 170166| 170168| 170169| 170170| 170171| 170172| 170174| 170175| 170176| 170177| 170178| 170179| 170180| 170181| 170183| 170184| 170185| 170186),
+          design = subset(exp_per, p02==2),
+          na.rm = TRUE,
+          method = "xlogit")  
+
+Cálculo de estadísticas descriptivas
+```{r}
+#     Cálculo de N de personas en Quito
+
+# Subset solo Quito
+exp_quito <- subset(exp_per, 
+                    ciudad %in% parroquias_quito)
+
+# cálculo de población en Quito
+svytotal(~one, design = exp_quito)
+
+
+#     cálculo de N de mujeres en Quito
+
+svytotal(~I(p02 == 2),
+         design = exp_quito)
+
+
+# cálculo del número de pobres
+svytotal(~I(pobreza == 1), 
+         design = exp_quito, 
+         na.rm = TRUE)
+
+# cálculo del número extrema pobreza
+svytotal(~I(epobreza == 1), 
+         design = exp_quito, 
+         na.rm = TRUE)
+
+# cálculo del número de mujeres pobres
+svytotal(~I(p02 == 2 & pobreza == 1), 
+         design = exp_quito, 
+         na.rm = TRUE)
+
+# cálculo del número de mujeres extrema pobreza
+svytotal(~I(p02 == 2 & pobreza == 1), 
+         design = exp_quito, 
+         na.rm = TRUE)
+
+
+
+
+
+```
+Crear variable para identificar a los que viven SOLOS
+```{r}
+# Contar cuántas personas hay en cada hogar
+conteo_hogar <- bdd_personas %>%
+  group_by(id_hogar) %>%
+  summarise(n_personas = n())
+
+# Unir este conteo a la base original
+bdd_personas <- bdd_personas %>%
+  left_join(conteo_hogar, by = "id_hogar")
+
+# Crear variable que identifique a quienes viven solos
+bdd_personas <- bdd_personas %>%
+  mutate(vive_solo = ifelse(n_personas == 1, 1, 0))
+
+```
+
+
+Cálculo del total de personas que viven solas en Quito
+```{r}
+# Rehacer diseño muestral después de agregar la variable
+exp_per <- svydesign(id = ~upm,
+                     strata = ~estrato,
+                     data = bdd_personas,
+                     weights = ~fexp)
+
+# Filtrar solo Quito
+exp_quito <- subset(exp_per, ciudad %in% parroquias_quito)
+
+# Calcular el total de personas que viven solas
+svytotal(~I(vive_solo == 1), design = exp_quito)
+```
+
+Personas que viven solas y en extrema pobreza en la ciudad de Quito
+```{r}
+svytotal(~I(vive_solo == 1 & epobreza == 1), design = exp_quito, na.rm = TRUE)
+```
+
+Personas que viven solas y en extrema pobreza en la ciudad de Quito y son adultos mayores
+```{r}
+# Total de personas que viven solas, en extrema pobreza y con 65 años o más
+svytotal(~I(vive_solo == 1 & epobreza == 1 & p03 >= 65), design = exp_quito, na.rm = TRUE)
+```
+
+Personas que viven solas y en extrema pobreza en la ciudad de Quito (mujeres/hombres)
+```{r}
+# Cálculo por sexo
+svytotal(~interaction(p02, vive_solo == 1 & epobreza == 1 & p03 >= 65), design = exp_quito, na.rm = TRUE)
+```
+
+
+Personas que viven solas y en extrema pobreza en la ciudad de Quito y son mayores de 18 años
+```{r}
+svytotal(~I(vive_solo == 1 & epobreza == 1 & p03 >= 18), design = exp_quito, na.rm = TRUE)
+```

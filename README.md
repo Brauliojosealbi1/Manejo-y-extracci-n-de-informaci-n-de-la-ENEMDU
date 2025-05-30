@@ -4,8 +4,8 @@ Este repositorio contiene un script en **R** para cargar, limpiar y analizar los
 
 ## 📌 Autor
 **Juan José Almeida**  
-Licenciado en Negocios Internacionales | Máster en Relaciones Internacionales y Comunicación  
-Especialista en cooperación y análisis de datos
+Economista
+MSc Data Science for Business 
 
 ## 📊 Funcionalidades principales
 
